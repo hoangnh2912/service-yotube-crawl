@@ -1,7 +1,8 @@
 const puppeteer = require("puppeteer");
 const fs = require("fs");
 const config = {
-  url: "https://www.youtube.com/channel/UC40matwhaoY44zR4bvTljYg",
+  url: "https://www.youtube.com/results?search_query=",
+  keyword: ["thối nát", "đảng", "tội ác đảng", "cộng sản"],
 };
 
 async function autoScrollBottom(page) {
@@ -28,54 +29,53 @@ async function autoScrollBottom(page) {
   });
 }
 
-async function autoScrollTop(page) {
-  await page.evaluate(async () => {
-    await new Promise((resolve, reject) => {
-      var totalHeight = 0;
-      var distance = 300;
-      var timer = setInterval(() => {
-        var scrollHeight = document.body.scrollHeight;
-        window.scrollBy(-distance, -distance);
-        totalHeight += distance;
-
-        if (totalHeight >= scrollHeight) {
-          clearInterval(timer);
-          resolve();
-        }
-      }, 200);
-    });
-  });
-}
-
 let dataCrawl = [];
 const crawlPage = async (browser) => {
-  const page = await browser.newPage();
-  await page.setDefaultNavigationTimeout(0);
+  for (let i = 0; i < config.keyword.length; i++) {
+    const key = config.keyword[i];
+    console.log("Crawl keyword:" + key);
 
-  await page.goto(`${config.url}`, {
-    waitUntil: "networkidle2",
-  });
-  await page.evaluate(async () => {
-    await document
-      .getElementsByClassName("tab-content style-scope paper-tab")[1]
-      .click();
-  });
-  await autoScrollBottom(page);
-  const res = await page.evaluate(async () => {
-    let arr = [];
-    const videos = await document.getElementsByClassName(
-      "yt-simple-endpoint inline-block style-scope ytd-thumbnail"
+    const page = await browser.newPage();
+    await page.setDefaultNavigationTimeout(0);
+
+    await page.goto(`${config.url + key}`, {
+      waitUntil: "networkidle2",
+    });
+    await page.evaluate(() => {
+      document
+        .getElementsByClassName(
+          "style-scope ytd-toggle-button-renderer style-text"
+        )[0]
+        .click();
+      document
+        .getElementsByClassName("style-scope ytd-search-filter-renderer")[4]
+        .click();
+    });
+
+    await autoScrollBottom(page);
+
+    const res = await page.evaluate(() => {
+      let arr = [];
+      const videos = document.getElementsByClassName(
+        "yt-simple-endpoint style-scope ytd-video-renderer"
+      );
+      console.log("total video: " + videos.length);
+      for (let i = 0; i < videos.length; i++) {
+        arr.push({ title: videos[i].textContent.trim(), url: videos[i].href });
+      }
+      return arr;
+    });
+    console.log(res.length);
+    // dataCrawl.push({ keyword: key, data: res });
+    await fs.writeFile(
+      __dirname + "./crawl_data/" + new Date().toJSON() + "_" + key + ".json",
+      JSON.stringify(res),
+      console.log
     );
-    console.log("total video: " + videos.length);
-    for (let i = 0; i < videos.length; i++) {
-      arr.push(videos[i].href);
-    }
-    return arr;
-  });
-  dataCrawl = dataCrawl.concat(res);
-
-  await page.close();
-  return res;
+    console.log("saved file: " + key);
+    await page.close();
+  }
+  return [];
 };
 
 puppeteer
@@ -87,22 +87,5 @@ puppeteer
     // save: "",
   })
   .then(async (browser) => {
-    console.log("Crawl page ");
     const data = await crawlPage(browser);
-    console.log(data.length);
-    // for (let j = 0; j < data.length; j++) {
-    //   console.log("Item " + (j + i * data.length) + "/" + dataCrawl.length);
-    //   const pg = await browser.newPage();
-    //     await pg.setDefaultNavigationTimeout(0);
-    //   await pg.goto(data[j].url, {
-    //     waitUntil: "networkidle2",
-    //   });
-    //   try {
-
-    //   } catch (error) {}
-
-    //   await pg.close();
-    // }
-    fs.writeFileSync(`crawl.json`, JSON.stringify(data));
-    console.log("saved file: ");
   });
