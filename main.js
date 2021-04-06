@@ -1,5 +1,6 @@
 const puppeteer = require("puppeteer");
 const fs = require("fs");
+const { exec } = require("child_process");
 const config = {
   url: "https://www.youtube.com/results?search_query=",
   keyword: [
@@ -10,7 +11,24 @@ const config = {
     "việt nam cộng hòa",
     "VNCH",
   ],
+  name_save_file:new Date().toISOString()+".json"
 };
+
+
+exec("echo >> crawl_data/"+ config.name_save_file + " []", (error, stdout, stderr) => {
+    if (error) {
+        console.log(`error: ${error.message}`);
+        return;
+    }
+    if (stderr) {
+        console.log(`stderr: ${stderr}`);
+        return;
+    }
+    console.log(`stdout: ${stdout}`);
+});
+
+
+
 
 async function autoScrollBottom(page) {
   await page.evaluate(async () => {
@@ -86,7 +104,7 @@ const crawlPage = async (browser) => {
     let oldData = require("./crawl_data/data.json");
     // oldData.push(res);
     await fs.writeFile(
-      "./crawl_data/data.json",
+      "./crawl_data/"+config.name_save_file,
       JSON.stringify([...oldData, ...res]),
       console.log
     );
@@ -106,5 +124,16 @@ puppeteer
   })
   .then(async (browser) => {
     const data = await crawlPage(browser);
+    exec("hadoop fs -put crawl_data/"+config.name_save_file+" /youtube-crawl", (error, stdout, stderr) => {
+    if (error) {
+        console.log(`error: ${error.message}`);
+        return;
+    }
+    if (stderr) {
+        console.log(`stderr: ${stderr}`);
+        return;
+    }
+    console.log(`stdout: ${stdout}`);
+});
     await browser.close();
   });
