@@ -2,7 +2,14 @@ const puppeteer = require("puppeteer");
 const fs = require("fs");
 const config = {
   url: "https://www.youtube.com/results?search_query=",
-  keyword: ["thối nát", "đảng", "tội ác đảng", "cộng sản"],
+  keyword: [
+    "thối nát",
+    "đảng",
+    "tội ác đảng",
+    "cộng sản",
+    "việt nam cộng hòa",
+    "VNCH",
+  ],
 };
 
 async function autoScrollBottom(page) {
@@ -20,7 +27,7 @@ async function autoScrollBottom(page) {
         else timeEq = 0;
         oldHeight = contentHeight;
         console.log(timeEq);
-        if (timeEq >= 10) {
+        if (timeEq >= 20) {
           clearInterval(timer);
           resolve();
         }
@@ -61,15 +68,26 @@ const crawlPage = async (browser) => {
       );
       console.log("total video: " + videos.length);
       for (let i = 0; i < videos.length; i++) {
-        arr.push({ title: videos[i].textContent.trim(), url: videos[i].href });
+        const youtubeChannel = document.getElementsByClassName(
+          "yt-simple-endpoint style-scope yt-formatted-string"
+        )[i * 2 + 1];
+
+        arr.push({
+          title: videos[i].textContent.trim(),
+          url: videos[i].href,
+          date: new Date().toISOString(),
+          channelName: youtubeChannel.textContent,
+          channelUrl: youtubeChannel.href,
+        });
       }
       return arr;
     });
     console.log(res.length);
-    // dataCrawl.push({ keyword: key, data: res });
+    let oldData = require("./crawl_data/data.json");
+    // oldData.push(res);
     await fs.writeFile(
-      __dirname + "./crawl_data/" + new Date().toJSON() + "_" + key + ".json",
-      JSON.stringify(res),
+      "./crawl_data/data.json",
+      JSON.stringify([...oldData, ...res]),
       console.log
     );
     console.log("saved file: " + key);
@@ -88,4 +106,5 @@ puppeteer
   })
   .then(async (browser) => {
     const data = await crawlPage(browser);
+    await browser.close();
   });
