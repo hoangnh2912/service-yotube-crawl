@@ -1,6 +1,10 @@
 const puppeteer = require("puppeteer");
 const fs = require("fs");
 const { exec } = require("child_process");
+const jsonexport = require("jsonexport");
+
+exec("rm -rf ./crawl_data/*.json", (error, stdout, stderr) => {});
+
 const config = {
   url: "https://www.youtube.com/results?search_query=",
   keyword: [
@@ -11,24 +15,33 @@ const config = {
     "việt nam cộng hòa",
     "VNCH",
   ],
-  name_save_file:new Date().toISOString()+".json"
+  name_save_file:
+    new Date()
+      .toLocaleString()
+      .split(":")
+      .join("_")
+      .split("/")
+      .join("_")
+      .split(",")
+      .join("")
+      .split(" ")
+      .join("_") + ".json",
 };
 
-
-exec("echo >> crawl_data/"+ config.name_save_file + " []", (error, stdout, stderr) => {
+exec(
+  "echo >> crawl_data/" + config.name_save_file + " []",
+  (error, stdout, stderr) => {
     if (error) {
-        console.log(`error: ${error.message}`);
-        return;
+      console.log(`error: ${error.message}`);
+      return;
     }
     if (stderr) {
-        console.log(`stderr: ${stderr}`);
-        return;
+      console.log(`stderr: ${stderr}`);
+      return;
     }
-    console.log(`stdout: ${stdout}`);
-});
-
-
-
+    if (stdout) console.log(`stdout: ${stdout}`);
+  }
+);
 
 async function autoScrollBottom(page) {
   await page.evaluate(async () => {
@@ -101,22 +114,22 @@ const crawlPage = async (browser) => {
       return arr;
     });
     console.log(res.length);
-    let oldData = require("./crawl_data/data.json");
-    // oldData.push(res);
+    let oldData = require("./crawl_data/" + config.name_save_file);
+    dataCrawl = [...oldData, ...res];
     await fs.writeFile(
-      "./crawl_data/"+config.name_save_file,
-      JSON.stringify([...oldData, ...res]),
-      console.log
+      "./crawl_data/" + config.name_save_file,
+      JSON.stringify(dataCrawl),
+      () => {}
     );
     console.log("saved file: " + key);
     await page.close();
   }
-  return [];
+  return dataCrawl;
 };
 
 puppeteer
   .launch({
-    devtools: true,
+    devtools: false,
     timeout: 0,
     // args: ["--no-sandbox"],
     // executablePath: "/usr/lib/chromium-browser/chromium-browser",
@@ -124,16 +137,27 @@ puppeteer
   })
   .then(async (browser) => {
     const data = await crawlPage(browser);
-    exec("hadoop fs -put crawl_data/"+config.name_save_file+" /youtube-crawl", (error, stdout, stderr) => {
-    if (error) {
-        console.log(`error: ${error.message}`);
-        return;
-    }
-    if (stderr) {
-        console.log(`stderr: ${stderr}`);
-        return;
-    }
-    console.log(`stdout: ${stdout}`);
-});
+    jsonexport(data, async (err, csv) => {
+      await fs.writeFile(
+        "./crawl_data/" + config.name_save_file.replace(".json",".csv"),
+        csv,
+        () => {}
+      );
+    });
+
+    exec(
+      "hadoop fs -put crawl_data/" + config.name_save_file.replace(".json",".csv") + " /youtube-crawl",
+      (error, stdout, stderr) => {
+        if (error) {
+          console.log(`error: ${error.message}`);
+          return;
+        }
+        if (stderr) {
+          console.log(`stderr: ${stderr}`);
+          return;
+        }
+        console.log(`stdout: ${stdout}`);
+      }
+    );
     await browser.close();
   });
