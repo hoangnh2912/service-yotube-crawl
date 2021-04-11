@@ -2,19 +2,20 @@ const puppeteer = require("puppeteer");
 const fs = require("fs");
 const { exec } = require("child_process");
 const jsonexport = require("jsonexport");
-
-exec("rm -rf ./crawl_data/*.json", (error, stdout, stderr) => {});
+const { UPLOAD_DATE } = require("./constants");
 
 const config = {
+  is_big_data: false,
   url: "https://www.youtube.com/results?search_query=",
   keyword: [
     "thối nát",
-    "đảng",
-    "tội ác đảng",
-    "cộng sản",
-    "việt nam cộng hòa",
-    "VNCH",
+    // "đảng",
+    // "tội ác đảng",
+    // "cộng sản",
+    // "việt nam cộng hòa",
+    // "VNCH",
   ],
+  upload_date: UPLOAD_DATE.TODAY,
   name_save_file:
     new Date()
       .toLocaleString()
@@ -31,6 +32,7 @@ const config = {
 exec(
   "echo >> crawl_data/" + config.name_save_file + " []",
   (error, stdout, stderr) => {
+    console.log(config.name_save_file);
     if (error) {
       console.log(`error: ${error.message}`);
       return;
@@ -79,16 +81,16 @@ const crawlPage = async (browser) => {
     await page.goto(`${config.url + key}`, {
       waitUntil: "networkidle2",
     });
-    await page.evaluate(() => {
+    await page.evaluate((cf) => {
       document
         .getElementsByClassName(
           "style-scope ytd-toggle-button-renderer style-text"
         )[0]
         .click();
       document
-        .getElementsByClassName("style-scope ytd-search-filter-renderer")[4]
-        .click();
-    });
+        .getElementsByClassName("style-scope ytd-search-filter-renderer")
+        [cf.upload_date].click();
+    }, config);
 
     await autoScrollBottom(page);
 
@@ -113,9 +115,11 @@ const crawlPage = async (browser) => {
       }
       return arr;
     });
-    console.log(res.length);
-    let oldData = require("./crawl_data/" + config.name_save_file);
-    dataCrawl = [...oldData, ...res];
+
+    console.log(key + " : " + res.length);
+    // let dataCrawl = require("./crawl_data/" + config.name_save_file);
+    dataCrawl.push(...res);
+    console.log("current data " + dataCrawl.length);
     await fs.writeFile(
       "./crawl_data/" + config.name_save_file,
       JSON.stringify(dataCrawl),
@@ -129,7 +133,7 @@ const crawlPage = async (browser) => {
 
 puppeteer
   .launch({
-    devtools: false,
+    devtools: true,
     timeout: 0,
     // args: ["--no-sandbox"],
     // executablePath: "/usr/lib/chromium-browser/chromium-browser",
@@ -139,25 +143,28 @@ puppeteer
     const data = await crawlPage(browser);
     jsonexport(data, async (err, csv) => {
       await fs.writeFile(
-        "./crawl_data/" + config.name_save_file.replace(".json",".csv"),
+        "./crawl_data/" + config.name_save_file.replace(".json", ".csv"),
         csv,
         () => {}
       );
     });
-
-    exec(
-      "hadoop fs -put crawl_data/" + config.name_save_file.replace(".json",".csv") + " /youtube-crawl",
-      (error, stdout, stderr) => {
-        if (error) {
-          console.log(`error: ${error.message}`);
-          return;
+    exec("rm -rf ./crawl_data/*.json", (error, stdout, stderr) => {});
+    if (config.is_big_data)
+      exec(
+        "hadoop fs -put crawl_data/" +
+          config.name_save_file.replace(".json", ".csv") +
+          " /youtube-crawl",
+        (error, stdout, stderr) => {
+          if (error) {
+            console.log(`error: ${error.message}`);
+            return;
+          }
+          if (stderr) {
+            console.log(`stderr: ${stderr}`);
+            return;
+          }
+          console.log(`stdout: ${stdout}`);
         }
-        if (stderr) {
-          console.log(`stderr: ${stderr}`);
-          return;
-        }
-        console.log(`stdout: ${stdout}`);
-      }
-    );
+      );
     await browser.close();
   });
